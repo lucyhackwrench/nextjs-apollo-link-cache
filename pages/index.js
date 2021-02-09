@@ -1,3 +1,11 @@
+import { ApolloClient } from 'apollo-client';
+import gql from 'graphql-tag';
+import { InMemoryCache } from 'apollo-cache-inmemory';
+import { HttpLink } from 'apollo-link-http';
+import { ApolloLink } from 'apollo-link';
+import { createCacheLink } from 'apollo-link-redis-cache';
+import loggerLink from 'apollo-link-logger';
+
 import Head from 'next/head'
 import styles from '../styles/Home.module.css'
 
@@ -62,4 +70,60 @@ export default function Home() {
       </footer>
     </div>
   )
+}
+
+
+const createApolloClient = () => {
+  const Redis = require('ioredis');
+  const redis = new Redis();
+
+  let link;
+  link = ApolloLink.from([
+    createCacheLink(redis),
+    loggerLink,
+    new HttpLink({
+          uri: 'https://api.spacex.land/graphql/',
+          //credentials: 'same-origin',
+        }
+    )]);
+
+  const client = new ApolloClient({
+    link,
+    cache: new InMemoryCache()
+  });
+
+  return client;
+}
+
+export async function getServerSideProps() {
+  const client = createApolloClient();
+
+  const { data } = await client.query({
+    query: gql`
+      query GetLaunches {
+        launchesPast(limit: 10) {
+          id
+          mission_name
+          launch_date_local
+          launch_site {
+            site_name_long
+          }
+          links {
+            article_link
+            video_link
+            mission_patch
+          }
+          rocket {
+            rocket_name
+          }
+        }
+      }
+    `
+  });
+
+  return {
+    props: {
+      launches: data.launchesPast
+    }
+  }
 }
